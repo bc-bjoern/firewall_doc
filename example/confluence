@@ -1,0 +1,163 @@
+#!/usr/bin/env python2.7
+"""
+update confluence pages
+Iterate over directory with xml files of iptables
+"""
+
+import json
+import os
+import requests
+from requests.auth import HTTPBasicAuth
+
+from firewall_doc import parse_iptables_xml
+
+
+class FC():
+    """
+    Class Firewall Confluence
+    """
+    def __init__(self):
+        self.username = '<%= @confluence_username %>'
+        self.password = '<%= @confluence_password %>'
+        self.url = '<%= @confluence_url %>'
+        self.space_key = '<%= @confluence_space %>'
+        self.parent_page = '<%= @confluence_parent_page_id %>'
+        self.input_path = '/var/lib/firewall/'
+        self.limit = '500'
+
+    def check_if_update_needed(self, page_id, table):
+        """
+        check if the html table has changed
+        """
+        request_result_needed = requests.get(self.url + '/content/' + page_id + '?expand=body.storage', auth=HTTPBasicAuth(self.username, self.password))
+        if request_result_needed.status_code == 200:
+            print 'Get for ' + page_id + ' successfully'
+            page_info = json.loads(request_result_needed.text)
+            actual_table = page_info['body']['storage']['value']
+            if actual_table.strip() == table.strip():
+                return False
+            else:
+                return True
+        else:
+            print 'Get not successfully'
+            request_result_needed.json()
+
+    def check_json_results(self, json_data, needle):
+        """
+        enumerate json_data
+        """
+        for c, v in enumerate(json_data["results"]):
+            if "_archived_" in v["title"]:
+                # FIXME Delete if page is old
+                # request_result_delete = requests.delete(self.url + '/content/' + v["id"], auth=HTTPBasicAuth(self.username, self.password))
+                print "Archived"
+            elif v["title"] == needle:
+                return v["id"]
+            else:
+                if os.path.isfile(self.input_path + '/' + v["title"] + '.xml') is False:
+                    request_result_archive = requests.get(self.url + '/content/' + v["id"] + '?expand=version&limit=' + self.limit, auth=HTTPBasicAuth(self.username, self.password))
+                    if request_result_archive.status_code == 200:
+                        print 'Get for ' + v["title"] + ' successfully'
+                        page_info = json.loads(request_result_archive.text)
+                        version = page_info["version"]["number"] + 1
+                    else:
+                        print 'Get not successfully'
+                        request_result_archive.json()
+
+                    headers = {'Content-Type': 'application/json'}
+                    data = {"id": v["id"], "type": "page", "title": '_archived_' + v["title"], "space": {"key": self.space_key}, "version": {"number": str(version)}, "ancestors": [{"id": self.parent_page}]}
+                    request_result_update = requests.put(self.url + '/content/' + str(v["id"]), auth=HTTPBasicAuth(self.username, self.password), data=json.dumps(data), headers=headers)
+                    if request_result_update.status_code == 200:
+                        print 'Update Page ' + v["title"] + ' with ' + v["id"] + ' successfully'
+                    else:
+                        print 'Update not sucessfully'
+                        print request_result_update.json()
+
+        return False
+
+    def check_if_page_already_exists(self, servername):
+        """
+        check if page exists
+        return a false tuple if not
+        and the id in addition to the version if the page is existing
+        """
+        request_result_search = requests.get(self.url + '/content/search?limit=' + self.limit + '&cql=(parent=' + self.parent_page + ')', auth=HTTPBasicAuth(self.username, self.password))
+        json_data = json.loads(request_result_search.text)
+
+        result = self.check_json_results(json_data, servername)
+
+        if result is False:
+            return ('false', 'false')
+        else:
+            request_result_search = requests.get(self.url + '/content/' + result + '?expand=version', auth=HTTPBasicAuth(self.username, self.password))
+
+            if request_result_search.status_code == 200:
+                print 'Get for ' + servername + ' successfully'
+                page_info = json.loads(request_result_search.text)
+                return (result, page_info["version"]["number"])
+            else:
+                print 'Get not successfully'
+                request_result_search.json()
+
+
+    def create_a_new_page(self, servername, table):
+        """
+        Create a new Wikipage
+        """
+        print 'Try to create a new page'
+        headers = {'Content-Type': 'application/json'}
+        data = {"type": "page", "title": servername, "space": {"key": self.space_key}, "ancestors": [{"id": self.parent_page}], "body": {"storage": {"value": table, "representation": "storage"}}}
+        request_result_create = requests.post(self.url + '/content/', auth=HTTPBasicAuth(self.username, self.password), data=json.dumps(data), headers=headers)
+        if request_result_create.status_code == 200:
+            print 'Create Page for ' + servername + ' sucessfully'
+        else:
+            print 'Create not sucessfully'
+            print request_result_create.json()
+
+    def update_existing_page(self, servername, page_id, version, table):
+        """
+        Update existing Wikipage
+        """
+        if self.check_if_update_needed(page_id, table) is True:
+            print 'Try to update page'
+            if version == '':
+                version = 2
+            else:
+                version += 1
+
+            headers = {'Content-Type': 'application/json'}
+            data = {"id": page_id, "type": "page", "title": servername, "space": {"key": self.space_key}, "ancestors": [{"id": self.parent_page}], "body": {"storage": {"value": table, "representation": "storage"}}, "version": {"number": str(version)}}
+
+            request_result_update = requests.put(self.url + '/content/' + str(page_id), auth=HTTPBasicAuth(self.username, self.password), data=json.dumps(data), headers=headers)
+            if request_result_update.status_code == 200:
+                print 'Update Page ' + servername + ' with ' + page_id + ' successfully'
+            else:
+                print 'Update not sucessfully'
+                print request_result_update.json()
+        else:
+            print "No Update needed"
+
+
+    def main(self):
+        """
+        Main Function to iterate over a directory
+        """
+        for servername in os.listdir(FC.input_path):
+            name = servername[:-4]
+            print '\nProcessing ' + servername + '\n'
+
+
+            parsed_html = parse_iptables_xml.ParseIptables(self.input_path + '/' + servername)
+            table = parsed_html.parse_file()
+
+            page_id, version = FC.check_if_page_already_exists(name)
+
+            if page_id == 'false':
+                FC.create_a_new_page(name, table)
+            else:
+                FC.update_existing_page(name, page_id, version, table)
+
+
+if __name__ == "__main__":
+    FC = FC()
+    FC.main()
