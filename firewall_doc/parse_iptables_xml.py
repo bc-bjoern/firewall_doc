@@ -99,8 +99,11 @@ class ParseIptables():
                         if i.find('actions'):
                             for action in i.find_all('actions'):
                                 actions = action.contents
-                                del actions[0]
-                                del actions[1]
+
+                                if len(actions) > 2:
+                                  del actions[0]
+                                  del actions[1]
+
                                 actions = str(actions)
                                 matchobj = re.match(r'\[<(.*)>(.*)</(.*)>\]', actions, re.M|re.I)
                                 if matchobj:
