@@ -42,7 +42,7 @@ class ParseIptables():
                 chain_name = chain_attr['name']
                 table_data = ''
 
-                if chain_name not in ('DOCKER-USER', 'DOCKER', 'DOCKER-ISOLATION-STAGE-2', 'DOCKER-ISOLATION-STAGE-1', 'PREROUTING', 'POSTROUTING'):
+                if chain_name not in ('DOCKER-USER', 'DOCKER', 'DOCKER-ISOLATION-STAGE-2', 'DOCKER-ISOLATION-STAGE-1', 'PREROUTING', 'POSTROUTING', 'KUBE-EXTERNAL-SERVICES', 'KUBE-FIREWALL', 'KUBE-FORWARD', 'KUBE-SERVICES', 'cali-FORWARD', 'cali-INPUT', 'cali-OUTPUT', 'cali-failsafe-in', 'cali-failsafe-out', 'cali-from-hep-forward', 'cali-from-host-endpoint', 'cali-from-wl-dispatch', 'cali-to-hep-forward', 'cali-to-host-endpoint', 'cali-to-wl-dispatch', 'cali-wl-to-host'):
                     table_prefix = ''
                     table_prefix += '\n\n\t<h3>' + chain_name + '</h3>'
                     table_prefix += '\n\n\t<table class=\"wrapped\"><colgroup><col /><col /><col /><col /></colgroup><tbody><tr><th>Source</th><th>Target</th><th>Protocol</th><th>Condition</th><th colspan=\"1\">Dest-Port</th><th>Action</th><th>Comment</th></tr>\n'
